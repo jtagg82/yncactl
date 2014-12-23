@@ -1,0 +1,390 @@
+#!/usr/bin/python2
+# -*- coding: utf-8 -*-
+
+import sys, getopt, telnetlib, time, ConfigParser, os, math
+
+
+# Global variables
+
+debug = False
+verbose = False
+ip_address = "0.0.0.0"
+port = 50000
+inputs = ""
+scenes = ""
+
+def main(argv):
+    load_config()   # load the config file. These will serve as defaults and can be overridden by CLI options
+    try:
+        opts, args = getopt.getopt(argv,"a:p:dhv",["verbose", "debug", "help", "address=", "port="])
+    except getopt.GetoptError:
+        usage()
+        sys.exit(2)
+
+    for opt, arg in opts:
+        if opt == '-h' or opt == "--help":
+            usage()
+            sys.exit()
+        if opt == '-d' or opt == "--debug":
+            global debug
+            debug = True
+        if opt == '-v' or opt == "--verbose":
+            global verbose
+            verbose = True
+        if opt == '-a' or opt == "--address":
+            global ip_address
+            ip_address = arg
+        if opt == '-p' or opt == "--port":
+            global port
+            port = int(arg)
+
+    if len(args) > 0:
+        command, cmd_args = args[0], args[1:]
+        if command == "device-info":
+            device_info(avr)
+        elif command == "test":
+            test()
+        elif command == "power":
+            power(cmd_args)
+        elif command == "volume" or command == "vol":
+            volume(cmd_args)
+        elif command == "scene":
+            scene(cmd_args)
+        elif command == "input":
+            inp(cmd_args)
+        elif command == "next":
+            playback("Skip Fwd")
+        elif command == "prev":
+            playback("Skip Rev")
+        elif command == "pause":
+            playback("Pause")
+        elif command == "play":
+            playback("Play")
+        elif command == "stop":
+            playback("Stop")
+        elif command == "songinfo":
+            song_info()
+        elif command == "list":
+            display_list(cmd_args)
+        elif command == "raw":
+            ynca_raw(cmd_args)
+        else:
+            usage()
+    else:
+        usage()
+    sys.exit()
+
+
+# COMMANDS
+
+def device_info():
+    avr = Ynca(ip_address, port)
+    model = avr.get_single("SYS", "MODELNAME")
+    version = avr.get_single("SYS", "VERSION")
+    print model, version
+    avr.close()
+
+def power(args):
+    avr = Ynca(ip_address, port)
+    if len(args) > 0:
+        power_state = avr.get_single("MAIN", "PWR")
+        cmd = args[0].lower()
+        if cmd == "on":
+            if power_state != "On":
+                avr.put("MAIN", "PWR", "On")
+        elif (cmd == "off" or cmd == "standby"):
+            if power_state != "Standby":
+                avr.put("MAIN", "PWR", "Standby")
+        elif cmd == "toggle":
+            avr.put("MAIN", "PWR", "On/Standby")
+        else:
+            print "yncactl power [ on | off | toggle ]"
+    if len(args) == 0 or verbose:
+        power_state = avr.get_single("MAIN", "PWR")
+        print power_state
+    avr.close()
+
+def volume(args):
+    avr = Ynca(ip_address, port)
+    if len(args) > 0:
+        state = avr.get_as_dict("MAIN", "BASIC")
+        curr_vol = float(state["MAIN:VOL"])
+        curr_mute = state["MAIN:MUTE"]
+        cmd = args[0].lower()
+        if cmd == "up":
+            avr.put("MAIN", "VOL", "Up")
+        elif cmd == "down":
+            avr.put("MAIN", "VOL", "Down")
+        elif cmd == "mute":
+            avr.put("MAIN", "MUTE", "On/Off")
+        else:
+            try:
+                rounded_vol = round_to_n(float(cmd), 0.5)
+                if rounded_vol < -80.5 or rounded_vol > 16.5: raise ValueError
+            except:
+                print "yncactl vol[ume] [ <volume> | up | down | mute ]"
+                print "-80.5 < volume < 16.5, step 0.5"
+            else:
+                if curr_vol != rounded_vol:
+                    print "Writing vol", rounded_vol
+                    avr.put("MAIN", "VOL", "{:.1f}".format(rounded_vol))
+    if len(args) == 0 or verbose:
+        state = avr.get_as_dict("MAIN", "BASIC")
+        curr_vol = float(state["MAIN:VOL"])
+        curr_mute = state["MAIN:MUTE"]
+        if curr_mute != "Off":
+            print "Muted (" + str(curr_vol) + "dB)"
+        else:
+            print str(curr_vol) + "dB"
+    avr.close()
+
+
+def inp(args):
+    avr = Ynca(ip_address, port)
+    if len(args) > 0:
+        desired_input = args[0].upper() 
+        current_input = avr.get_single("MAIN", "INP")
+        if desired_input in inputs and desired_input != current_input:
+            avr.put("MAIN", "INP", desired_input)
+        else:
+            print "yncactl input <value>"
+            print "where value is one of: " + inputs
+    if len(args) == 0 or verbose:
+        input_names = avr.get_as_dict("SYS", "INPNAME") 
+        current_input = avr.get_single("MAIN", "INP")
+        input_name = input_names["SYS:INPNAME"+current_input].strip()
+        print current_input, '(' + input_name + ')'
+    avr.close()
+
+def scene(args):
+    avr = Ynca(ip_address, port)
+    if len(args) > 0:
+        scene = "Scene " + args[0]
+        if scene in scenes: 
+            avr.put("MAIN", "SCENE", scene)
+        else:
+            print "ynca scene 1..4"
+    avr.close()
+
+def playback(parameter):
+    avr = Ynca(ip_address, port)
+    avr.put("MAIN", "PLAYBACK", parameter)
+    avr.close()
+
+#def song_info():
+#    session = connect()
+#    put(session, "MAIN", "
+
+def display_list(args):
+    avr = Ynca(ip_address, port)
+    if len(args) > 0:
+        subunit = args[0].upper()
+        state = avr.get_single(subunit, "AVAIL")
+        if state != "Ready": avr.put("MAIN", "INP", subunit)
+    
+        # remove spaces for the "NET RADIO" case which has no space as subunit
+        subunit = subunit.replace(" ", "")
+
+        # we extract useful values for the current list state
+        listinfo = avr.get_as_dict(subunit, "LISTINFO")
+        list_layer = int(listinfo[subunit+":LISTLAYER"])
+        layer_name = listinfo[subunit+":LISTLAYERNAME"]
+        num_lines = int(listinfo[subunit+":MAXLINE"])
+        current_line = int(listinfo[subunit+":CURRLINE"])
+
+        # we calculate others
+        current_page = current_line / 8
+        max_page = num_lines / 8
+        max_num_width = int(math.ceil(math.log10(num_lines)))
+
+        if len(args) > 1 and args[1].isdigit():
+            if int(args[1]) == 0:
+                avr.put(subunit, "LISTCURSOR", "Return")
+            else:
+                selected_index = int(args[1])
+                index_page = (selected_index - 1) / 8
+                while index_page != current_page:
+                    if abs(index_page - current_page) > 5:
+                        direction = "Down 10" if index_page > current_page else "Up 10"
+                        current_page = current_page + 10 if direction == "Down 10" else current_page - 10
+                    else:
+                        direction = "Down" if index_page > current_page else "Up"
+                        current_page = current_page + 1 if direction == "Down" else current_page - 1
+                    avr.put(subunit, "LISTPAGE", direction)
+                selection = selected_index % 8
+                if selection == 0: selection = 8
+                avr.put(subunit, "LISTSEL", "Line_"+str(selection))
+                print listinfo[subunit+":LINE"+str(selection)+"ATRIB"] + ": " + listinfo[subunit+":LINE"+str(selection)+"TXT"]
+        else:
+            # check cache first
+            folder = os.path.expanduser("~/.cache/yncactl/")
+            filename = str(list_layer) + '.' + layer_name
+            filename = filename.replace('/', '_')
+            has_cache = os.path.isfile(folder + filename) 
+            use_cache = False
+            if has_cache:
+                lines = []
+                with open(folder + filename) as f:
+                    for line in f:
+                        lines.append(line)
+                if len(lines) == num_lines + 2:
+                    for line in lines:
+                        print line.strip()
+                    use_cache = True
+                else:
+                    os.remove(folder + filename)
+            if not use_cache: 
+                cache_file = open(folder + filename, 'w')
+                print layer_name
+                print "0".rjust(max_num_width), "Back"
+                cache_file.write(layer_name + '\n')
+                cache_file.write("0".rjust(max_num_width) + " Back\n")
+                while current_page > 0:
+                    if current_page > 10:
+                        avr.put(subunit, "LISTPAGE", "Up 10")
+                        current_page -= 10
+                    else:
+                        avr.put(subunit, "LISTPAGE", "Up")
+                        current_page -= 1
+                current_page = 0
+                while current_page <= max_page:
+                    listinfo = avr.get_as_dict(subunit, "LISTINFO")
+                    for i in range(1, 9):
+                        if listinfo[subunit+":LINE"+str(i)+"ATRIB"] != "Unselectable":
+                            thing = str((current_page) * 8 + i).rjust(max_num_width) + " " +  listinfo[subunit+":LINE"+str(i)+"TXT"]
+                            print thing
+                            cache_file.write(thing + '\n')
+                    if max_page > 0: avr.put(subunit, "LISTPAGE", "Down")
+                    current_page = current_page + 1
+                cache_file.close()
+    avr.close()
+
+def ynca_raw(args):
+    session = connect()
+    session.write(args[0]+"\r\n")
+    for line in get_response(session):
+        print line
+    session.close()
+
+
+class Ynca:
+
+    def __init__(self, hostname, port):
+        self.session = telnetlib.Telnet(hostname, port, 3)
+
+    def close(self):
+        self.session.close()
+
+    def send(self, command):
+        self.session.write( command + "\r\n" )
+        #print "<" + command + ">"
+
+    def put(self, subunit, function, parameter):
+        output = '@' + subunit + ':' + function + '=' + parameter
+        self.send(output)
+        response = self._get_response()
+        return response
+
+    def get(self, subunit, function):
+        output = '@' + subunit + ':' + function + "=?"
+        self.send(output)
+        response = self._get_response()
+        return response
+
+    def get_single(self, subunit, function):
+        response = self.get(subunit, function)[0]
+        parameter = self._split_response(response)[2]
+        return parameter
+
+    def get_as_dict(self, subunit, function):
+        dictionary = {}
+        response = self.get(subunit, function)
+        for line in response:
+            subunit, function, parameter = self._split_response(line)
+            dictionary[subunit+':'+function] = parameter
+        return dictionary
+
+    def _get_response(self):
+        response = []
+        timeout = 2
+        while True:
+            reply = self.session.read_until('\r\n', timeout).strip()
+            timeout = 0.1
+            if reply == "":
+                break
+            else:
+                #print "<" + reply + ">"
+                response.append(reply)
+        return response
+
+    def _split_response(self, response):
+        colon = response.find(':')
+        equals = response.find('=')
+        return response[1:colon], response[colon+1:equals], response[equals+1:]
+
+    
+        
+# HELPER FUNCTIONS
+
+def to_dict(responses):
+    dictionary = {}
+    subunit = ""
+    for response in responses:
+        subunit, funcname, parameter = split_response(response)
+        dictionary[funcname] = parameter
+    dictionary["Subunit"] = subunit
+    return dictionary
+
+def split_response(response):
+    colon = response.find(':')
+    equals = response.find('=')
+    return response[1:colon], response[colon+1:equals], response[equals+1:]
+
+def get_subunit(response):
+    return split_response(response)[0]
+
+def get_funcname(response):
+    return split_response(response)[1]
+
+def get_parameter(response):
+    return split_response(response)[2]
+
+def round_to_n(value, precision):
+    correction = 0.5 if value >= 0 else -0.5
+    rounded = int(value / precision + correction) * precision
+    return rounded
+
+def load_config():
+    global ip_address
+    global port
+    global inputs
+    global scenes
+    config = ConfigParser.RawConfigParser()
+    config.read(os.path.expanduser("~/.config/ynca.conf"))
+    ip_address = config.get("Network", "IP_Address")
+    port = config.get("Network", "Port")
+    inputs = config.get("Features", "Inputs").strip(',')
+    scenes = config.get("Features", "Scenes").strip(',')
+
+
+
+def usage():
+    print "YNCA controller"
+    print "ynca [options] command [cmd args]"
+    print "Options:"
+    print "     -h  --help          print this message"
+    print "     -q  --quiet         no output to stdout"
+    print "     -a <hostname>       hostname of the AVR"
+    print "     -p <port>           TCP port. Def. 50000"
+    print "Commands:"
+    print "     power               on | off | toggle"
+    print "     volume              up | down | <value> | mute"
+    print "     list <subunit>      name of the subunit to list"
+    print "     device-info         AVR model name and version"
+    print "     scene <scene #>     switch to a scene"
+    print "     input <input>       switch to an input"
+    
+
+
+if __name__ == "__main__":
+    main(sys.argv[1:])

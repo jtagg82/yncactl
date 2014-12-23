@@ -1,0 +1,14 @@
+#!/bin/sh
+
+finished=0
+
+while [ $finished=0 ]
+do
+output=`yncactl list $1`
+header="`echo -e "$output" | head -n 1`"
+rest="`echo -e "$output" | tail -n +2`"
+
+choice=`echo -e "$rest" | rofi -dmenu -p "$header: " -width 80 -location 2 -bg "#000000" -fg "#FFFFFF" -hlbg "#285500" -opacity "90"`
+
+yncactl list $1 $choice
+done
