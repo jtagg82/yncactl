@@ -52,6 +52,8 @@ def main(argv):
             scene(cmd_args)
         elif command == "input":
             inp(cmd_args)
+        elif command == "list-inputs":
+            list_inputs()
         elif command == "next":
             playback("Skip Fwd")
         elif command == "prev":
@@ -68,6 +70,8 @@ def main(argv):
             display_list(cmd_args)
         elif command == "raw":
             ynca_raw(cmd_args)
+        elif command == "ir-code":
+            ir_code(cmd_args)
         else:
             usage()
     else:
@@ -145,15 +149,33 @@ def inp(args):
         desired_input = args[0].upper() 
         current_input = avr.get_single("MAIN", "INP")
         if desired_input in inputs and desired_input != current_input:
-            avr.put("MAIN", "INP", desired_input)
+            if desired_input == "NETRADIO":
+                avr.put("MAIN", "INP", "NET RADIO")
+            else:
+                avr.put("MAIN", "INP", desired_input)
         else:
             print "yncactl input <value>"
-            print "where value is one of: " + inputs
     if len(args) == 0 or verbose:
         input_names = avr.get_as_dict("SYS", "INPNAME") 
         current_input = avr.get_single("MAIN", "INP")
-        input_name = input_names["SYS:INPNAME"+current_input].strip()
-        print current_input, '(' + input_name + ')'
+        try:
+            input_name = input_names["SYS:INPNAME"+current_input].strip()
+        except KeyError:
+            print current_input
+        else:
+            print current_input, '(' + input_name + ')'
+    avr.close()
+
+def list_inputs():
+    avr = Ynca(ip_address, port)
+    input_names = avr.get_as_dict("SYS", "INPNAME") 
+    for inp in inputs:
+        try:
+            input_name = input_names["SYS:INPNAME" + inp].strip()
+        except KeyError:
+            print inp
+        else:
+            print inp, '(' + input_name + ')'
     avr.close()
 
 def scene(args):
@@ -171,35 +193,58 @@ def playback(parameter):
     avr.put("MAIN", "PLAYBACK", parameter)
     avr.close()
 
-#def song_info():
-#    session = connect()
-#    put(session, "MAIN", "
+def song_info():
+    avr = Ynca(ip_address, port)
+    avr.get_as_dict("MAIN", "PLAYBACKINFO")
+    avr.close()
+
 
 def display_list(args):
+
+#    def go_to_page0(current_page, last_page):
+#    while current_page > 0:
+#            if current_page > last_page / 2:
+#                if last_page - current_page > 10:
+#                    direction = "Up 10"
+#                    current_page += 10
+#                else:
+#                    direction = "Up"
+#                    current_page += 1
+#            else:
+#                if current_page > 10:
+#                    direction = "Down 10"
+#                    current_page -= 10
+#                else:
+#                    direction = "Down"
+#                    current_page -= 1
+
     avr = Ynca(ip_address, port)
     if len(args) > 0:
         subunit = args[0].upper()
         state = avr.get_single(subunit, "AVAIL")
-        if state != "Ready": avr.put("MAIN", "INP", subunit)
-    
-        # remove spaces for the "NET RADIO" case which has no space as subunit
-        subunit = subunit.replace(" ", "")
+        if state != "Ready":
+            if subunit == "NETRADIO":
+                avr.put("MAIN", "INP", "NET RADIO")
+            else:
+                avr.put("MAIN", "INP", args[0].upper())
+            time.sleep(1)
 
         # we extract useful values for the current list state
         listinfo = avr.get_as_dict(subunit, "LISTINFO")
-        list_layer = int(listinfo[subunit+":LISTLAYER"])
-        layer_name = listinfo[subunit+":LISTLAYERNAME"]
-        num_lines = int(listinfo[subunit+":MAXLINE"])
-        current_line = int(listinfo[subunit+":CURRLINE"])
+        list_layer = int(listinfo[subunit + ":LISTLAYER"])
+        layer_name = listinfo[subunit + ":LISTLAYERNAME"]
+        num_lines = int(listinfo[subunit + ":MAXLINE"])
+        current_line = int(listinfo[subunit + ":CURRLINE"])
 
         # we calculate others
-        current_page = current_line / 8
+        current_page = (current_line - 1) / 8
         max_page = num_lines / 8
         max_num_width = int(math.ceil(math.log10(num_lines)))
 
         if len(args) > 1 and args[1].isdigit():
             if int(args[1]) == 0:
                 avr.put(subunit, "LISTCURSOR", "Return")
+                print "Return"
             else:
                 selected_index = int(args[1])
                 index_page = (selected_index - 1) / 8
@@ -249,7 +294,7 @@ def display_list(args):
                 current_page = 0
                 while current_page <= max_page:
                     listinfo = avr.get_as_dict(subunit, "LISTINFO")
-                    for i in range(1, 9):
+                    for i in xrange(1, 9):
                         if listinfo[subunit+":LINE"+str(i)+"ATRIB"] != "Unselectable":
                             thing = str((current_page) * 8 + i).rjust(max_num_width) + " " +  listinfo[subunit+":LINE"+str(i)+"TXT"]
                             print thing
@@ -260,12 +305,16 @@ def display_list(args):
     avr.close()
 
 def ynca_raw(args):
-    session = connect()
-    session.write(args[0]+"\r\n")
-    for line in get_response(session):
-        print line
-    session.close()
+    avr = Ynca(ip_address, port)
+    response = avr.send(args[0])
+    for line in response: print line
+    avr.close()
 
+def ir_code(args):
+    avr = Ynca(ip_address, port)
+    code = args[0].upper().replace('-', '').strip()
+    avr.put("SYS", "REMOTECODE", code)
+    avr.close()
 
 class Ynca:
 
@@ -276,19 +325,18 @@ class Ynca:
         self.session.close()
 
     def send(self, command):
-        self.session.write( command + "\r\n" )
         #print "<" + command + ">"
+        self.session.write( command + "\r\n" )
+        return self._get_response()
 
     def put(self, subunit, function, parameter):
         output = '@' + subunit + ':' + function + '=' + parameter
-        self.send(output)
-        response = self._get_response()
+        response = self.send(output)
         return response
 
     def get(self, subunit, function):
         output = '@' + subunit + ':' + function + "=?"
-        self.send(output)
-        response = self._get_response()
+        response = self.send(output)
         return response
 
     def get_single(self, subunit, function):
@@ -363,8 +411,7 @@ def load_config():
     config.read(os.path.expanduser("~/.config/ynca.conf"))
     ip_address = config.get("Network", "IP_Address")
     port = config.get("Network", "Port")
-    inputs = config.get("Features", "Inputs").strip(',')
-    scenes = config.get("Features", "Scenes").strip(',')
+    inputs = config.get("Features", "Inputs").split(',')
 
 
 

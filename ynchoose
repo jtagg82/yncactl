@@ -1,6 +1,7 @@
 #!/bin/sh
 
 finished=0
+dmenu_cmd="rofi -dmenu -width 80 -location 2 -bg "#000000" -fg "#FFFFFF" -hlbg "#BB7700" -opacity "90""
 
 while [ $finished -eq 0 ]
 do
@@ -8,7 +9,7 @@ do
     header="`echo -e "$output" | head -n 1`"
     rest="`echo -e "$output" | tail -n +2`"
 
-    choice=`echo -e "$rest" | rofi -dmenu -p "$header: " -width 80 -location 2 -bg "#000000" -fg "#FFFFFF" -hlbg "#285500" -opacity "90"`
+    choice=`echo -e "$rest" | $dmenu_cmd -p "$header":`
 
     if [ -n "$choice" ]; then
         choose=`yncactl list $1 $choice`
