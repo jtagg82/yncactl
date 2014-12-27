@@ -8,6 +8,7 @@ import sys, getopt, telnetlib, time, ConfigParser, os, math
 
 debug = False
 verbose = False
+no_cache = False
 ip_address = "0.0.0.0"
 port = 50000
 inputs = ""
@@ -16,7 +17,7 @@ scenes = ""
 def main(argv):
     load_config()   # load the config file. These will serve as defaults and can be overridden by CLI options
     try:
-        opts, args = getopt.getopt(argv,"a:p:dhv",["verbose", "debug", "help", "address=", "port="])
+        opts, args = getopt.getopt(argv,"a:p:dhvn",["verbose", "debug", "no-cache", "help", "address=", "port="])
     except getopt.GetoptError:
         usage()
         sys.exit(2)
@@ -37,6 +38,9 @@ def main(argv):
         if opt == '-p' or opt == "--port":
             global port
             port = int(arg)
+        if opt == '-n' or opt == "--no-cache":
+            global no_cache
+            no_cache = True
 
     if len(args) > 0:
         command, cmd_args = args[0], args[1:]
@@ -261,29 +265,33 @@ def display_list(args):
                 avr.put(subunit, "LISTSEL", "Line_"+str(selection))
                 print listinfo[subunit+":LINE"+str(selection)+"ATRIB"] + ": " + listinfo[subunit+":LINE"+str(selection)+"TXT"]
         else:
-            # check cache first
-            folder = os.path.expanduser("~/.cache/yncactl/")
-            filename = str(list_layer) + '.' + layer_name
-            filename = filename.replace('/', '_')
-            has_cache = os.path.isfile(folder + filename) 
-            use_cache = False
-            if has_cache:
-                lines = []
-                with open(folder + filename) as f:
-                    for line in f:
-                        lines.append(line)
-                if len(lines) == num_lines + 2:
-                    for line in lines:
-                        print line.strip()
-                    use_cache = True
-                else:
-                    os.remove(folder + filename)
+            if not no_cache:
+                # check cache first
+                folder = os.path.expanduser("~/.cache/yncactl/")
+                filename = str(list_layer) + '.' + layer_name
+                filename = filename.replace('/', '_')
+                has_cache = os.path.isfile(folder + filename) 
+                use_cache = False
+                if has_cache:
+                    lines = []
+                    with open(folder + filename) as f:
+                        for line in f:
+                            lines.append(line)
+                    if len(lines) == num_lines + 2:
+                        for line in lines:
+                            print line.strip()
+                        use_cache = True
+                    else:
+                        os.remove(folder + filename)
+            else:
+                use_cache = False
             if not use_cache: 
-                cache_file = open(folder + filename, 'w')
                 print layer_name
                 print "0".rjust(max_num_width), "Back"
-                cache_file.write(layer_name + '\n')
-                cache_file.write("0".rjust(max_num_width) + " Back\n")
+                if not no_cache:
+                    cache_file = open(folder + filename, 'w')
+                    cache_file.write(layer_name + '\n')
+                    cache_file.write("0".rjust(max_num_width) + " Back\n")
                 while current_page > 0:
                     if current_page > 10:
                         avr.put(subunit, "LISTPAGE", "Up 10")
@@ -298,10 +306,10 @@ def display_list(args):
                         if listinfo[subunit+":LINE"+str(i)+"ATRIB"] != "Unselectable":
                             thing = str((current_page) * 8 + i).rjust(max_num_width) + " " +  listinfo[subunit+":LINE"+str(i)+"TXT"]
                             print thing
-                            cache_file.write(thing + '\n')
+                            if not no_cache: cache_file.write(thing + '\n')
                     if max_page > 0: avr.put(subunit, "LISTPAGE", "Down")
                     current_page = current_page + 1
-                cache_file.close()
+                if not no_cache: cache_file.close()
     avr.close()
 
 def ynca_raw(args):
