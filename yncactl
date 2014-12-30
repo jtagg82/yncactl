@@ -12,6 +12,7 @@ no_cache = False
 ip_address = "0.0.0.0"
 port = 50000
 inputs = ""
+sound_programs = ""
 scenes = ""
 
 def main(argv):
@@ -56,8 +57,12 @@ def main(argv):
             scene(cmd_args)
         elif command == "input":
             inp(cmd_args)
+        elif command == "sound-program":
+            sound_program(cmd_args)
         elif command == "list-inputs":
             list_inputs()
+        elif command == "list-programs":
+            list_programs()
         elif command == "next":
             playback("Skip Fwd")
         elif command == "prev":
@@ -170,6 +175,18 @@ def inp(args):
             print current_input, '(' + input_name + ')'
     avr.close()
 
+def sound_program(args):
+    avr = Ynca(ip_address, port)
+    if len(args) > 0:
+        desired_program = args[0]
+        current_program = avr.get_single("MAIN", "SOUNDPRG")
+        if desired_program in sound_programs and desired_program != current_program:
+            avr.put("MAIN", "SOUNDPRG", desired_program)
+    if len(args) == 0 or verbose:
+        current_program = avr.get_single("MAIN", "SOUNDPRG")
+        print current_program
+    avr.close()
+
 def list_inputs():
     avr = Ynca(ip_address, port)
     input_names = avr.get_as_dict("SYS", "INPNAME") 
@@ -180,6 +197,12 @@ def list_inputs():
             print inp
         else:
             print inp, '(' + input_name + ')'
+    avr.close()
+
+def list_programs():
+    avr = Ynca(ip_address, port)
+    for program in sound_programs:
+        print program.strip()
     avr.close()
 
 def scene(args):
@@ -243,7 +266,7 @@ def display_list(args):
         # we calculate others
         current_page = (current_line - 1) / 8
         max_page = num_lines / 8
-        max_num_width = int(math.ceil(math.log10(num_lines)))
+        max_num_width = int(math.ceil(math.log10(num_lines+1)))
 
         if len(args) > 1 and args[1].isdigit():
             if int(args[1]) == 0:
@@ -279,7 +302,7 @@ def display_list(args):
                             lines.append(line)
                     if len(lines) == num_lines + 2:
                         for line in lines:
-                            print line.strip()
+                            print line.rstrip()
                         use_cache = True
                     else:
                         os.remove(folder + filename)
@@ -415,12 +438,13 @@ def load_config():
     global port
     global inputs
     global scenes
+    global sound_programs
     config = ConfigParser.RawConfigParser()
     config.read(os.path.expanduser("~/.config/ynca.conf"))
     ip_address = config.get("Network", "IP_Address")
     port = config.get("Network", "Port")
     inputs = config.get("Features", "Inputs").split(',')
-
+    sound_programs = config.get("Features", "SoundPrograms").split(', ')
 
 
 def usage():
