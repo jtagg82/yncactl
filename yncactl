@@ -46,7 +46,7 @@ def main(argv):
     if len(args) > 0:
         command, cmd_args = args[0], args[1:]
         if command == "device-info":
-            device_info(avr)
+            device_info()
         elif command == "test":
             test()
         elif command == "power":
@@ -448,21 +448,41 @@ def load_config():
 
 
 def usage():
-    print "YNCA controller"
+    print "YNCA controller v1.1"
     print "ynca [options] command [cmd args]"
     print "Options:"
     print "     -h  --help          print this message"
-    print "     -q  --quiet         no output to stdout"
-    print "     -a <hostname>       hostname of the AVR"
-    print "     -p <port>           TCP port. Def. 50000"
+    print "     -d  --debug         print debug strings"
+    print "     -v  --verbose       print more detailed output"
+    print "     -a  --address       hostname of the AVR"
+    print "     -p  --port          TCP port. Def. 50000"
     print "Commands:"
-    print "     power               on | off | toggle"
-    print "     volume              up | down | <value> | mute"
+    print "commands without any arguments will typically return the current state"
+    print "     power [ on | off | toggle ]"
+    print "                         power AVR on or off"
+    print "     vol[ume] [ up | down | <value> | mute ]"
+    print "                         read or modify volume"
+    print "     scene [<scene #>]"
+    print "                         select scene"
+    print "     input [<input>]"
+    print "                         return or select current input"
+    print "     sound-program [<program>]"
+    print "                         return or select sound program"
     print "     list <subunit>      name of the subunit to list"
-    print "     device-info         AVR model name and version"
-    print "     scene <scene #>     switch to a scene"
-    print "     input <input>       switch to an input"
-    
+    print "     list-inputs         lists all possible inputs"
+    print "     list-programs       lists all possible programs"
+    print "     device-info         print AVR model name and version"
+    print "     next                skip to next song"
+    print "     prev                skip to previous song"
+    print "     pause               pause playback"
+    print "     play                start playback"
+    print "     stop                stop playback"
+    print "     songinfo            print information on currently playing song"
+    print "     raw                 send raw YNCA command"
+    print "     ir-code             send ir-code of remote button"
+    print "     list <subunit> [#]  lists all items for the subunit specified"
+    print "                         adding a number selects item number # instead of listing"
+
 
 
 if __name__ == "__main__":
