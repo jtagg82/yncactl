@@ -19,6 +19,7 @@ Make sure to copy the configuration file to ~/.config/ynca.conf. Without this, i
      -v  --verbose       print more detailed output
      -a  --address       hostname of the AVR
      -p  --port          TCP port. Def. 50000
+     -n  --no-cache      disables the list cache
 ```
 
 **Commands:**
@@ -72,7 +73,14 @@ Example of list usage:
      [lists all genres]
      ...
 ```
-     
+   
+### ynchoose  
 The script _ynchoose_ integrates these list calls into dmenu so you can navigate them easily.
-     
+
+### config     
 Since all Yamaha AVRs don't have the same functions, you need to edit your configuration file to reflect that. I have only tested this on a RX-V475, but it should be quite easy to make it work with most other Yamaha AVRs of the same series.
+
+### caching
+Since the AVR is slow at navigating and returning lists, yncactl caches various lists to speed things up. When a cache exists, it doesn't need to navigate through a whole list just to determine what the items are. If you do not want to use the cache, use the -n or --no-cache option when calling yncactl. The cache will be created in ~/.cache/yncactl. 
+Each file in there represents a list. The hit mechanism is rudimentary and should work for most standard cases, but it is definitely not complete. If you are having problems with the cache, just delete the contents of the folder.
+It considers a cache file a hit if the name corresponds to the depth of the list followed by the list name and if the contents have the same number of items.
