@@ -10,7 +10,7 @@ Make sure to copy the configuration file to ~/.config/ynca.conf. Without this, i
 
 ### Usage
 
-**ynca [options] command [cmd args]**
+     ynca [options] command [cmd args]
 
 **Options:**
 ```
