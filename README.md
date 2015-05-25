@@ -30,10 +30,8 @@ commands without any arguments will typically return the current state
                          power AVR on or off
      vol[ume] [ up | down | <value> | mute ]
                          read or modify volume
-     scene [<scene #>]
-                         select scene
-     input [<input>]
-                         return or select current input
+     scene <scene #>     select scene
+     input [<input>]     return active or select input
      sound-program [<program>]
                          return or select sound program
      list <subunit>      name of the subunit to list
@@ -46,8 +44,8 @@ commands without any arguments will typically return the current state
      play                start playback
      stop                stop playback
      songinfo            print information on currently playing song
-     raw                 send raw YNCA command
-     ir-code             send ir-code of remote button
+     raw <command>       send raw YNCA command
+     ir-code <code>      send ir-code of remote button
      list <subunit> [#]  lists all items for the subunit specified
                          adding a number selects item number # instead of listing
 ```
